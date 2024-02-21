@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use crate::parsing::parsing_error::{ErrorKind, ParsingError};
 
+#[derive(Debug, PartialEq)]
 pub enum LTLToken {
     AP(u8),
     Not,
@@ -79,4 +80,27 @@ pub fn lexer(text: &str) -> Result<Vec<LTLToken>, ParsingError> {
     }
 
     return Ok(tokens);
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use LTLToken::*;
+
+    #[test]
+    fn test_operators() {
+        assert_eq!(lexer("a!Ub&)Xa("), Ok(vec![AP(0), Not, Until, AP(1), And, CloseParenthesis, Next, AP(0), OpenParenthesis]));
+    }
+
+    #[test]
+    fn test_long_variables() {
+        assert_eq!(lexer("aUntilB U a_until_b aUntilB"), Ok(vec![AP(0), Until, AP(1), AP(0)]));
+    }
+
+    #[test]
+    fn test_invalid_chars() {
+        assert_eq!(lexer("Zahl").unwrap_err().kind(), ErrorKind::UnexpectedToken);
+        assert_eq!(lexer("a ? b").unwrap_err().kind(), ErrorKind::UnexpectedToken);
+    }
 }

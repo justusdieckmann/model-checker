@@ -1,6 +1,7 @@
 use crate::parsing::LTLFormula;
 use crate::parsing::lexer::LTLToken;
 use crate::parsing::parsing_error::{ErrorKind, ParsingError};
+use crate::parsing::parsing_error::ErrorKind::ShittySyntax;
 
 const OPERATOR_PRIO_AP: u32 = 1000;
 const OPERATOR_PRIO_NOT: u32 = 800;
@@ -26,7 +27,12 @@ impl LTLFormulaBuilding {
             LTLFormulaBuilding::And(_, ref mut phi) |
             LTLFormulaBuilding::Next(ref mut phi) |
             LTLFormulaBuilding::Until(_, ref mut phi) |
-            LTLFormulaBuilding::Identity(ref mut phi) => {*phi = Some(Box::new(other))}
+            LTLFormulaBuilding::Identity(ref mut phi) => {
+                if phi.is_some() {
+                    return Err(());
+                }
+                *phi = Some(Box::new(other))
+            }
         }
         return Ok(());
     }
@@ -102,15 +108,16 @@ impl LTLFormulaBuilding {
         };
     }
 
-    fn to_formula(&self) -> LTLFormula {
-        return match self {
+    fn to_formula(&self) -> Result<LTLFormula, ()> {
+        return Ok(match self {
             LTLFormulaBuilding::AP(id) => LTLFormula::AP(*id),
-            LTLFormulaBuilding::Not(phi1) => LTLFormula::Not(Box::new(phi1.as_ref().unwrap().to_formula())),
-            LTLFormulaBuilding::And(phi1, phi2) => LTLFormula::And(Box::new(phi1.as_ref().unwrap().to_formula()), Box::new(phi2.as_ref().unwrap().to_formula())),
-            LTLFormulaBuilding::Next(phi1) => LTLFormula::Next(Box::new(phi1.as_ref().unwrap().to_formula())),
-            LTLFormulaBuilding::Until(phi1, phi2) => LTLFormula::Until(Box::new(phi1.as_ref().unwrap().to_formula()), Box::new(phi2.as_ref().unwrap().to_formula())),
-            LTLFormulaBuilding::Identity(phi1) => phi1.as_ref().unwrap().to_formula()
-        };
+            LTLFormulaBuilding::Not(Some(phi1)) => LTLFormula::Not(Box::new(phi1.as_ref().to_formula()?)),
+            LTLFormulaBuilding::And(Some(phi1), Some(phi2)) => LTLFormula::And(Box::new(phi1.as_ref().to_formula()?), Box::new(phi2.as_ref().to_formula()?)),
+            LTLFormulaBuilding::Next(Some(phi1)) => LTLFormula::Next(Box::new(phi1.as_ref().to_formula()?)),
+            LTLFormulaBuilding::Until(Some(phi1), Some(phi2)) => LTLFormula::Until(Box::new(phi1.as_ref().to_formula()?), Box::new(phi2.as_ref().to_formula()?)),
+            LTLFormulaBuilding::Identity(Some(phi1)) => phi1.as_ref().to_formula()?,
+            _ => {return Err(());}
+        });
     }
 }
 
@@ -120,13 +127,19 @@ pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, ParsingError> {
     for token in &tokens {
         match token {
             LTLToken::AP(id) => {
-                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::AP(*id)).unwrap();
+                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::AP(*id)).map_err(|_| {
+                    ParsingError::new(ShittySyntax, "", None)
+                })?;
             }
             LTLToken::Not => {
-                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::Not(None)).unwrap();
+                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::Not(None)).map_err(|_| {
+                    ParsingError::new(ShittySyntax, "", None)
+                })?;
             }
             LTLToken::Next => {
-                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::Next(None)).unwrap();
+                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::Next(None)).map_err(|_| {
+                    ParsingError::new(ShittySyntax, "", None)
+                })?;
             }
             LTLToken::And => {
                 let parent_node = current.last_mut().unwrap().get_highest_node_with_prio_greater_than(OPERATOR_PRIO_AND).get_right_content_mut().unwrap();
@@ -167,8 +180,45 @@ pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, ParsingError> {
     }
 
     return if current.first().is_some() {
-        Ok(current.last().unwrap().to_formula())
+        current.first().unwrap().to_formula().map_err(|_| ParsingError::new(ShittySyntax, "", None))
     } else {
-        return Err(ParsingError::new(ErrorKind::EmptyFormula, "", None));
+        Err(ParsingError::new(ErrorKind::ShittySyntax, "", None))
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use LTLToken as T;
+    use LTLFormula as F;
+
+    #[test]
+    fn test_basic_parsing() {
+        assert_eq!(parser(vec![T::Next, T::AP(0), T::And, T::AP(1), T::Until, T::Not, T::AP(0)]),
+                   Ok(F::Until(
+                       Box::new(F::And(
+                           Box::new(F::Next(Box::new(F::AP(0)))),
+                           Box::new(F::AP(1)),
+                       )),
+                       Box::new(F::Not(Box::new(F::AP(0)))),
+                   ))
+        );
+    }
+
+    #[test]
+    fn test_proper_errors() {
+        assert_eq!(parser(vec![]).unwrap_err().kind(), ShittySyntax);
+        assert_eq!(parser(vec![T::AP(0), T::AP(1)]).unwrap_err().kind(), ShittySyntax);
+        assert_eq!(parser(vec![T::Until, T::AP(0)]).unwrap_err().kind(), ShittySyntax);
+        assert_eq!(parser(vec![T::AP(0), T::Next]).unwrap_err().kind(), ShittySyntax);
+        assert_eq!(parser(vec![T::OpenParenthesis, T::OpenParenthesis, T::AP(0), T::CloseParenthesis])
+                       .unwrap_err().kind(), ErrorKind::UnmatchedOpenParenthesis);
+        assert_eq!(parser(vec![T::OpenParenthesis, T::AP(0), T::CloseParenthesis, T::CloseParenthesis])
+                       .unwrap_err().kind(), ErrorKind::UnmatchedCloseParenthesis);
+        assert_eq!(parser(vec![T::CloseParenthesis, T::AP(0), T::OpenParenthesis])
+                       .unwrap_err().kind(), ErrorKind::UnmatchedCloseParenthesis);
+        assert_eq!(parser(vec![T::AP(0), T::And, T::OpenParenthesis, T::CloseParenthesis]).unwrap_err().kind(),
+                   ErrorKind::EmptyParenthesis)
+    }
+
 }
