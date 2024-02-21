@@ -1,5 +1,6 @@
 use crate::parsing::LTLFormula;
 use crate::parsing::lexer::LTLToken;
+use crate::parsing::parsing_error::{ErrorKind, ParsingError};
 
 const OPERATOR_PRIO_AP: u32 = 1000;
 const OPERATOR_PRIO_NOT: u32 = 800;
@@ -113,7 +114,7 @@ impl LTLFormulaBuilding {
     }
 }
 
-pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, &'static str> {
+pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, ParsingError> {
     let mut current = vec![LTLFormulaBuilding::Identity(None)];
 
     for token in &tokens {
@@ -150,11 +151,11 @@ pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, &'static str> {
             }
             LTLToken::CloseParenthesis => {
                 if current.len() <= 1 {
-                    return Err("Unmatched )");
+                    return Err(ParsingError::new(ErrorKind::UnmatchedCloseParenthesis, "", None));
                 }
                 let mut last = current.pop().unwrap();
                 if let LTLFormulaBuilding::Identity(None) = last.get_rightmost_leaf() {
-                    return Err("Empty Parenthesis")
+                    return Err(ParsingError::new(ErrorKind::EmptyParenthesis, "", None));
                 }
                 let _ = current.last_mut().unwrap().get_rightmost_leaf().add(last);
             }
@@ -162,12 +163,12 @@ pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, &'static str> {
     }
 
     if current.len() > 1 {
-        return Err("Unmatched (");
+        return Err(ParsingError::new(ErrorKind::UnmatchedOpenParenthesis, "", None));
     }
 
     return if current.first().is_some() {
         Ok(current.last().unwrap().to_formula())
     } else {
-        Err("Is empty")
+        return Err(ParsingError::new(ErrorKind::EmptyFormula, "", None));
     };
 }

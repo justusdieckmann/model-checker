@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::parsing::parsing_error::{ErrorKind, ParsingError};
 
 pub enum LTLToken {
     AP(u8),
@@ -10,7 +11,7 @@ pub enum LTLToken {
     CloseParenthesis,
 }
 
-pub fn lexer(text: &str) -> Result<Vec<LTLToken>, usize> {
+pub fn lexer(text: &str) -> Result<Vec<LTLToken>, ParsingError> {
     #[derive(PartialEq)]
     enum State {
         None,
@@ -58,7 +59,7 @@ pub fn lexer(text: &str) -> Result<Vec<LTLToken>, usize> {
                 '&' => LTLToken::And,
                 'U' => LTLToken::Until,
                 'X' | 'O' => LTLToken::Next,
-                _ => return Result::Err(i)
+                _ => return Err(ParsingError::new(ErrorKind::UnexpectedToken, text, Some(i)))
             };
 
             tokens.push(token);

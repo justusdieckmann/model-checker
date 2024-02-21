@@ -1,5 +1,8 @@
+use crate::parsing::parsing_error::ParsingError;
+
 mod parser;
 mod lexer;
+mod parsing_error;
 
 #[derive(PartialEq, Debug)]
 pub enum LTLFormula {
@@ -10,14 +13,8 @@ pub enum LTLFormula {
     Until(Box<LTLFormula>, Box<LTLFormula>),
 }
 
-pub fn parse(text: &str) -> Result<LTLFormula, ()> {
-    let tokens = lexer::lexer(text);
-    if tokens.is_err() {
-        return Err(());
-    }
-    let ast = parser::parser(tokens.unwrap());
-    if ast.is_err() {
-        return Err(());
-    }
-    return Ok(ast.unwrap());
+pub fn parse(text: &str) -> Result<LTLFormula, ParsingError> {
+    let tokens = lexer::lexer(text)?;
+    let ast = parser::parser(tokens)?;
+    return Ok(ast);
 }
