@@ -1,8 +1,13 @@
 mod parsing;
+mod buechi;
+extern crate bit_vec;
 
 fn main() {
-    dbg!(parsing::parse("a & b U c & a").expect("Got no result"));
+    let formula = parsing::parse("a U !((Xb) & c)").expect("Got no result");
 
-    dbg!(parsing::parse("a & (b U c) & a").expect("Got no result"));
+    let buechi = buechi::ltl_to_buechi::ltl_to_büchi(&formula);
+
+    dbg!(buechi);
+
 }
 

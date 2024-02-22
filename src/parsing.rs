@@ -4,7 +4,7 @@ mod parser;
 mod lexer;
 mod parsing_error;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum LTLFormula {
     AP(u8),
     Not(Box<LTLFormula>),
