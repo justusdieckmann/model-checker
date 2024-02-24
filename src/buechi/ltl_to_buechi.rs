@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::{AddAssign, BitOr, BitOrAssign};
 use bit_vec::BitVec;
-use crate::buechi::{GeneralizedBüchi, State, Symbol};
+use crate::buechi::{GeneralizedBüchi, State, Transitions};
 use crate::parsing::LTLFormula;
 
 fn get_aps_in_ltl(ltl: &LTLFormula, aps: &mut HashSet<u8>) {
@@ -29,32 +29,30 @@ pub fn ltl_to_büchi(ltl: &LTLFormula) -> GeneralizedBüchi<u64> {
         ltl, &mut states, &mut constraints, &mut end_set_functions, &mut HashMap::<&LTLFormula, u8>::new(), &mut ap_count.clone()
     );
 
-    let mut transitions = Vec::<HashMap::<State, Vec<Symbol>>>::new();
-    let mut start_transitions = HashMap::<State, Vec<Symbol>>::new();
+    let amount_states = states.len() + 1;
+    let start_id = states.len() as u64;
+    let mut transitions = Transitions::for_states(amount_states);
     let mut end_sets = vec![BitVec::with_capacity(states.len() + 1); end_set_functions.len()];
 
     for (i, state) in states.iter().enumerate() {
-        let mut transitions_for_state = HashMap::<State, Vec<Symbol>>::new();
         for (i2, state2) in states.iter().enumerate() {
             if constraints.iter().all(|constraint| {
                 constraint.compare(state, state2)
             }) {
-                transitions_for_state.insert(i2 as u64, vec![*state2 & ap_bitmask]);
+                transitions.add(i as u64, *state2 & ap_bitmask, i2 as u64);
             }
         }
-        transitions.push(transitions_for_state);
 
         if complete_function.get(state) {
-            start_transitions.insert(i as u64, vec![*state & ap_bitmask]);
+            transitions.add(start_id, *state & ap_bitmask, i as u64);
         }
 
         for (i2, end_set_function) in end_set_functions.iter().enumerate() {
             end_sets.get_mut(i2).unwrap().push(end_set_function.get(state));
         }
     }
-    let start_id = states.len() as u64;
+
     states.push(u64::MAX);
-    transitions.push(start_transitions);
     for (i2, _) in end_set_functions.iter().enumerate() {
         end_sets.get_mut(i2).unwrap().push(false);
     }
