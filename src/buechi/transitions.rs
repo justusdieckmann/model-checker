@@ -46,6 +46,16 @@ impl Transitions {
             .flat_map(|(state, vec)| {vec.iter().map(move |symbol| {(*symbol, *state)})})
     }
 
+    pub fn get_from_state_with_symbol(&self, from_state: State, with_symbol: Symbol) -> impl Iterator<Item=State> {
+        self.get_from_state(from_state).filter_map(move |(symbol, to_state)| {
+            return if symbol == with_symbol {
+                Some(to_state)
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn get_all<'a>(&'a self) -> impl Iterator<Item=(State, Symbol, State)> + 'a {
         return (0..self.transitions.len() as u64)
             .flat_map(move |from_state| {
