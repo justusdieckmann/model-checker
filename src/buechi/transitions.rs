@@ -41,12 +41,18 @@ impl Transitions {
         }
     }
 
+    pub fn get_next_states_from_state(&self, from_state: State) -> impl Iterator<Item=State> + '_ {
+        self.transitions.get(from_state as usize).unwrap().iter().map(|(a, _)| {
+            return *a;
+        })
+    }
+
     pub fn get_from_state<'a>(&'a self, from_state: State) -> impl Iterator<Item=(Symbol, State)> + 'a {
         self.transitions.get(from_state as usize).unwrap().iter()
             .flat_map(|(state, vec)| {vec.iter().map(move |symbol| {(*symbol, *state)})})
     }
 
-    pub fn get_from_state_with_symbol(&self, from_state: State, with_symbol: Symbol) -> impl Iterator<Item=State> {
+    pub fn get_from_state_with_symbol(&self, from_state: State, with_symbol: Symbol) -> impl Iterator<Item=State> + '_ {
         self.get_from_state(from_state).filter_map(move |(symbol, to_state)| {
             return if symbol == with_symbol {
                 Some(to_state)
