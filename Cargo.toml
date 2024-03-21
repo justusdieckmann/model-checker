@@ -1,9 +1,17 @@
 [package]
-name = "model-checker"
+name = "model-checker-ui"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bit-vec = "0.6"
+model_checker = { path = "lib" }
+env_logger = { version = "0.11", default-features = false, features = [
+    "auto-color",
+    "humantime",
+] }
+eframe = { version="0.26", features = [
+    "default",
+] }
+egui_extras = { version="0.26", features = ["default", "all_loaders"] }
