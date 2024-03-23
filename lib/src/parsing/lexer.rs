@@ -12,7 +12,7 @@ pub enum LTLToken {
     CloseParenthesis,
 }
 
-pub fn lexer(text: &str) -> Result<Vec<LTLToken>, ParsingError> {
+pub fn lexer(text: &str) -> Result<(Vec<LTLToken>, HashMap<String, u8>), ParsingError> {
     #[derive(PartialEq)]
     enum State {
         None,
@@ -79,7 +79,7 @@ pub fn lexer(text: &str) -> Result<Vec<LTLToken>, ParsingError> {
         tokens.push(LTLToken::AP(val));
     }
 
-    return Ok(tokens);
+    return Ok((tokens, aps));
 }
 
 

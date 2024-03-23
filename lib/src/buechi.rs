@@ -1,6 +1,6 @@
 pub mod ltl_to_buechi;
-mod transitions;
-mod product;
+pub(crate) mod transitions;
+pub mod product;
 
 use bit_vec::BitVec;
 use crate::buechi::transitions::Transitions;
@@ -35,6 +35,11 @@ struct EmptinessStruct {
 
 impl<T> Büchi<T>
     where T: Clone {
+
+    pub fn new(state_infos: Vec<T>, amount_aps: u8, start_state: State, transitions: Transitions, end_set: BitVec) -> Self {
+        Self { state_infos, amount_aps, start_state, transitions, end_set }
+    }
+
     pub fn from_generalized_büchi(generalized_büchi: GeneralizedBüchi<T>) -> Büchi<(T, u8)> {
         let amount_endsets = generalized_büchi.end_sets.len();
         if amount_endsets == 0 {
@@ -95,7 +100,7 @@ impl<T> Büchi<T>
             if s.outer_finished.get(qnext as usize).unwrap() {
                 s.stack.push(qnext);
                 return true;
-            } else if !self.end_set.get(qnext as usize).unwrap() {
+            } else if !s.inner.get(qnext as usize).unwrap() {
                 self.dfs_cycle(s, qnext);
                 return true;
             }
@@ -107,7 +112,7 @@ impl<T> Büchi<T>
         s.outer_begun.set(q as usize, true);
         for qnext in self.transitions.get_next_states_from_state(q) {
             if !s.outer_begun.get(qnext as usize).unwrap() {
-                if self.dfs(s, q) {
+                if self.dfs(s, qnext) {
                     s.stack.push(q);
                     return true;
                 }
@@ -128,7 +133,7 @@ impl<T> Büchi<T>
             outer_finished: BitVec::from_elem(self.amount_states() as usize, false),
         };
 
-        return self.dfs(&mut state, self.start_state)
+        return !self.dfs(&mut state, self.start_state)
     }
 }
 

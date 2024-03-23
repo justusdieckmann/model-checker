@@ -1,12 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use std::collections::HashMap;
-use model_checker;
 
 use eframe::egui;
-use eframe::egui::{Align2, Color32, FontId, Frame, PointerButton, Sense, Shape, Ui};
+use eframe::egui::{Align2, Color32, FontId, Frame, Key, PointerButton, Sense, Shape, Ui};
 use eframe::emath::{Pos2, Vec2};
 use eframe::epaint::{Stroke};
+use model_checker::{KripkeState, KripkeStructure, ltl_model_check};
 
 type StateId = u64;
 
@@ -25,12 +25,6 @@ fn main() -> Result<(), eframe::Error> {
             Box::<MyApp>::default()
         }),
     )
-
-    /*let formula = parsing::parse("a U !((Xb) & c)").expect("Got no result");
-
-    let buechi = buechi::ltl_to_buechi::ltl_to_büchi(&formula);
-
-    dbg!(buechi);*/
 }
 
 const STATE_RADIUS: f32 = 20.0;
@@ -41,6 +35,7 @@ struct MyState {
     aps: Vec<String>,
     pos: Pos2,
     id: StateId,
+    start: bool
 }
 
 struct MyApp {
@@ -69,6 +64,26 @@ impl Default for MyApp {
 
 impl MyApp {
 
+    fn begin_check(&self) {
+        let mut map = HashMap::new();
+
+        for state in self.states.values() {
+            map.insert(state.id, KripkeState {
+                aps: state.aps.clone(),
+                id: state.id,
+                start: state.start
+            });
+        }
+
+        let ks = KripkeStructure {
+            states: map,
+            transitions: self.transitions.clone(),
+        };
+
+        dbg!(ltl_model_check(&ks, &self.query));
+
+    }
+
     fn my_update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame, ui: &mut Ui) {
         ui.horizontal(|ui| {
             let name_label = ui.label("Query: ");
@@ -76,7 +91,7 @@ impl MyApp {
                 .labelled_by(name_label.id);
             let button = ui.button("Check");
             if button.clicked() {
-                // ...
+                self.begin_check();
             }
         });
         ui.horizontal(|ui| {
@@ -105,10 +120,23 @@ impl MyApp {
             let (mut response, painter) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
 
+            ctx.input(|input| {
+                if input.key_pressed(Key::Delete) {
+                    if let Some(selected_id) = self.selected_id {
+                        self.states.remove(&selected_id).unwrap();
+                        self.transitions.retain(|(state1, state2)| {
+                            *state1 != selected_id && *state2 != selected_id
+                        });
+                        self.selected_id = None;
+                        self.aptext = "".to_owned();
+                    }
+                }
+            });
+
             if let Some(pointer_pos) = response.interact_pointer_pos() {
                 let canvas_pos = pointer_pos;
 
-                let result = self.states.values().find(|state| {
+                let result = self.states.values_mut().find(|state| {
                     state.pos.distance(canvas_pos) <= STATE_RADIUS
                 });
                 if let Some(hit_state) = result {
@@ -121,6 +149,9 @@ impl MyApp {
                                 response.mark_changed();
                             }
                         }
+                        self.start_drag = None;
+                    } else if response.double_clicked() {
+                        hit_state.start = !hit_state.start;
                     } else if response.clicked() {
                         self.selected_id = Some(hit_state.id);
                         self.aptext = hit_state.aps.join(", ");
@@ -132,6 +163,7 @@ impl MyApp {
                             aps: vec![],
                             pos: canvas_pos,
                             id: self.current_id,
+                            start: false
                         });
                         self.selected_id = Some(self.current_id);
                         self.aptext.clear();
@@ -155,6 +187,9 @@ impl MyApp {
                         color
                     };
 
+                    if state.start {
+                        shapes.push(Shape::circle_filled(state.pos, 20.0, stroke_color.clone().gamma_multiply(0.25)));
+                    }
                     shapes.push(Shape::circle_stroke(state.pos, 20.0, Stroke::new(4.0, stroke_color)));
                     shapes.push(Shape::text(f, state.pos - Vec2 { x: 25.0, y: 0.0 }, Align2::RIGHT_CENTER, state.aps.join("\n"), FontId::monospace(12.0), color));
                 }
