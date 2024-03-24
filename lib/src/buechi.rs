@@ -97,7 +97,7 @@ impl<T> Büchi<T>
     fn dfs_cycle(&self, s: &mut EmptinessStruct, q: State) -> bool {
         s.inner.set(q as usize, true);
         for qnext in self.transitions.get_next_states_from_state(q) {
-            if s.outer_finished.get(qnext as usize).unwrap() {
+            if !s.outer_finished.get(qnext as usize).unwrap() {
                 s.stack.push(qnext);
                 return true;
             } else if !s.inner.get(qnext as usize).unwrap() {
@@ -120,20 +120,27 @@ impl<T> Büchi<T>
         }
         if self.end_set.get(q as usize).unwrap() && self.dfs_cycle(s, q) {
             s.stack.push(q);
+            return true;
         }
-        s.outer_finished.set(q as usize, false);
+        s.outer_finished.set(q as usize, true);
         return false;
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn get_loop(&self) -> Option<Vec<T>> {
         let mut state = EmptinessStruct {
-            stack: Vec::<Symbol>::new(),
+            stack: Vec::<State>::new(),
             inner: BitVec::from_elem(self.amount_states() as usize, false),
             outer_begun: BitVec::from_elem(self.amount_states() as usize, false),
             outer_finished: BitVec::from_elem(self.amount_states() as usize, false),
         };
 
-        return !self.dfs(&mut state, self.start_state)
+        return if self.dfs(&mut state, self.start_state) {
+            Some(state.stack.iter().map(|s| {
+                self.state_infos.get(*s as usize).unwrap().clone()
+            }).collect())
+        } else {
+            None
+        }
     }
 }
 

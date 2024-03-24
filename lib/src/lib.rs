@@ -67,6 +67,10 @@ pub fn ltl_model_check(ks: &KripkeStructure, formula: &str) -> bool {
     let generalized_büchi = ltl_to_büchi(&notltl);
     let büchi = Büchi::from_generalized_büchi(generalized_büchi);
     let product = buechi::product::product(&model, &büchi);
-    return product.is_empty();
+    let opt_loop = product.get_loop();
+    if (opt_loop.is_some()) {
+        dbg!(&opt_loop);
+    }
+    return opt_loop.is_none();
 }
 

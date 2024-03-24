@@ -100,7 +100,6 @@ impl CompareTheThing {
     }
 }
 
-
 fn ltl_to_büchi_recursive<'a>(
     ltl: &'a LTLFormula,
     states: &mut Vec<State>,
