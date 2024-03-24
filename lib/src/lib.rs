@@ -58,8 +58,8 @@ pub fn kripke_to_büchi(ks: &KripkeStructure, ap_map: &HashMap<String, u8>) -> B
     return Büchi::new(state_infos, ap_map.len() as u8, 0, transitions, BitVec::from_elem(amount_states, true));
 }
 
-pub fn ltl_model_check(ks: &KripkeStructure, formula: &str) -> bool {
-    let (ltl, ap_map) = parsing::parse(formula).unwrap();
+pub fn ltl_model_check(ks: &KripkeStructure, formula: &str) -> Option<bool> {
+    let (ltl, ap_map) = parsing::parse(formula).ok()?;
     let notltl = LTLFormula::Not(Box::new(ltl));
 
     let model = kripke_to_büchi(ks, &ap_map);
@@ -68,9 +68,9 @@ pub fn ltl_model_check(ks: &KripkeStructure, formula: &str) -> bool {
     let büchi = Büchi::from_generalized_büchi(generalized_büchi);
     let product = buechi::product::product(&model, &büchi);
     let opt_loop = product.get_loop();
-    if (opt_loop.is_some()) {
+    if opt_loop.is_some() {
         dbg!(&opt_loop);
     }
-    return opt_loop.is_none();
+    return Some(opt_loop.is_none());
 }
 

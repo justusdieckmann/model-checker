@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use eframe::egui;
 use eframe::egui::{Align2, Color32, FontId, Frame, Key, PointerButton, Sense, Shape, Ui};
-use eframe::emath::{Pos2, Vec2};
-use eframe::epaint::{Stroke};
+use eframe::emath::{Pos2, Vec2, vec2};
+use eframe::epaint::{CubicBezierShape, Stroke};
 use model_checker::{KripkeState, KripkeStructure, ltl_model_check};
 
 type StateId = u64;
@@ -46,6 +46,7 @@ struct MyApp {
     selected_id: Option<StateId>,
     query: String,
     aptext: String,
+    result_text: String
 }
 
 impl Default for MyApp {
@@ -58,14 +59,17 @@ impl Default for MyApp {
             selected_id: None,
             query: "".to_owned(),
             aptext: "".to_owned(),
+            result_text: "".to_owned()
         }
     }
 }
 
 impl MyApp {
 
-    fn begin_check(&self) {
+    fn check(&mut self) {
         let mut map = HashMap::new();
+
+        let mut has_start = false;
 
         for state in self.states.values() {
             map.insert(state.id, KripkeState {
@@ -73,32 +77,60 @@ impl MyApp {
                 id: state.id,
                 start: state.start
             });
+            if state.start {
+                has_start = true;
+            }
+
+            // Should probably happen inside the lib, and more performant.
+            if self.transitions.iter().find(|(s1, _)| {
+                *s1 == state.id
+            }).is_none() {
+                self.result_text = "⚠ KS ist nicht total".to_owned();
+                return;
+            }
         }
+
+        if !has_start {
+            self.result_text = "⚠ KS hat keinen Start".to_owned();
+            return;
+        }
+
 
         let ks = KripkeStructure {
             states: map,
             transitions: self.transitions.clone(),
         };
 
-        dbg!(ltl_model_check(&ks, &self.query));
+        let result = ltl_model_check(&ks, &self.query);
+
+        if let Some(success) = result {
+            if success {
+                self.result_text = "✔ Erfüllt".to_owned();
+            } else {
+                self.result_text = "❌ Fehler!".to_owned();
+            }
+        } else {
+            self.result_text = "⚠ Syntaxfehler".to_owned();
+        }
 
     }
 
     fn my_update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            let name_label = ui.label("Query: ");
+            let name_label = ui.label("Formel: ");
             ui.text_edit_singleline(&mut self.query)
                 .labelled_by(name_label.id);
-            let button = ui.button("Check");
+            let button = ui.button("Prüfen");
             if button.clicked() {
-                self.begin_check();
+                self.check();
             }
+            ui.label(&self.result_text);
         });
         ui.horizontal(|ui| {
             let name_label = ui.label("APs: ");
             ui.text_edit_singleline(&mut self.aptext)
                 .labelled_by(name_label.id);
-            let button = ui.button("Set");
+            let button = ui.button("Setzen");
             if button.clicked() {
                 if let Some(selected_id) = self.selected_id {
                     let state = self.states.get_mut(&selected_id).unwrap();
@@ -202,17 +234,41 @@ impl MyApp {
                 .flat_map(|(id1, id2)| {
                     let state1 = self.states.get(id1).unwrap();
                     let state2 = self.states.get(id2).unwrap();
-                    let dir = (state2.pos - state1.pos).normalized();
-                    let cross_dir = dir.rot90();
-                    let arrow_basepoint = state2.pos - dir * (STATE_RADIUS + ARROWHEAD_LENGTH);
-                    return [
-                        Shape::convex_polygon(vec![
-                            state2.pos - dir * STATE_RADIUS,
-                            arrow_basepoint + cross_dir * ARROWHEAD_HALF_WIDTH,
-                            arrow_basepoint - cross_dir * ARROWHEAD_HALF_WIDTH,
-                        ], color, Stroke::NONE),
-                        Shape::line_segment([state1.pos + dir * STATE_RADIUS, arrow_basepoint], Stroke::new(2.0, color)),
-                    ];
+
+                    return if id1 == id2 {
+                        let dir1 = vec2(1.0, -3.0).normalized();
+                        let dir2 = vec2(-dir1.x, dir1.y);
+                        let dir = -dir2;
+                        let cross_dir = dir.rot90();
+                        let arrow_basepoint = state1.pos + dir2 * (STATE_RADIUS + ARROWHEAD_LENGTH);
+                        [
+                            Shape::CubicBezier(
+                                CubicBezierShape::from_points_stroke(
+                                    [state1.pos + dir1 * STATE_RADIUS, state1.pos + dir1 * STATE_RADIUS * 3.0, state1.pos + dir2 * STATE_RADIUS * 3.0, state1.pos + dir2 * STATE_RADIUS],
+                                    false,
+                                    Color32::TRANSPARENT,
+                                    Stroke::new(2.0, color),
+                                )
+                            ),
+                            Shape::convex_polygon(vec![
+                                state1.pos - dir * STATE_RADIUS,
+                                arrow_basepoint + cross_dir * ARROWHEAD_HALF_WIDTH,
+                                arrow_basepoint - cross_dir * ARROWHEAD_HALF_WIDTH,
+                            ], color, Stroke::NONE),
+                        ]
+                    } else {
+                        let dir = (state2.pos - state1.pos).normalized();
+                        let cross_dir = dir.rot90();
+                        let arrow_basepoint = state2.pos - dir * (STATE_RADIUS + ARROWHEAD_LENGTH);
+                        [
+                            Shape::line_segment([state1.pos + dir * STATE_RADIUS, arrow_basepoint], Stroke::new(2.0, color)),
+                            Shape::convex_polygon(vec![
+                                state2.pos - dir * STATE_RADIUS,
+                                arrow_basepoint + cross_dir * ARROWHEAD_HALF_WIDTH,
+                                arrow_basepoint - cross_dir * ARROWHEAD_HALF_WIDTH,
+                            ], color, Stroke::NONE),
+                        ]
+                    }
                 }));
 
             response
