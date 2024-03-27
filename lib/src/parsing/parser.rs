@@ -1,51 +1,110 @@
 use crate::parsing::LTLFormula;
-use crate::parsing::lexer::LTLToken;
+use crate::parsing::lexer::{LTLToken, LTLTokenAtomic, LTLTokenBinaryInfix, LTLTokenUnaryPrefix};
 use crate::parsing::parsing_error::{ErrorKind, ParsingError};
 use crate::parsing::parsing_error::ErrorKind::ShittySyntax;
 
-const OPERATOR_PRIO_AP: u32 = 1000;
-const OPERATOR_PRIO_NOT: u32 = 800;
-const OPERATOR_PRIO_NEXT: u32 = 600;
-const OPERATOR_PRIO_AND: u32 = 400;
-const OPERATOR_PRIO_UNTIL: u32 = 200;
+#[derive(Debug)]
+enum LTLBinaryInfixKind {
+    And,
+    Or,
+    Implies,
+    Until,
+    WeakUntil,
+    Release
+}
+
+impl LTLBinaryInfixKind {
+    fn operator_precedence(&self) -> u32 {
+        return match self {
+            LTLBinaryInfixKind::And => 800,
+            LTLBinaryInfixKind::Or => 600,
+            LTLBinaryInfixKind::Implies => 400,
+            LTLBinaryInfixKind::Until |
+            LTLBinaryInfixKind::WeakUntil |
+            LTLBinaryInfixKind::Release => 200
+        }
+    }
+}
+
+#[derive(Debug)]
+enum LTLUnaryPrefixKind {
+    Not,
+    Next,
+    Future,
+    Generally,
+    Identity
+}
+
+impl LTLUnaryPrefixKind {
+    fn operator_precedence(&self) -> u32 {
+        return 1000;
+    }
+}
+
+#[derive(Debug)]
+enum LTLAtomicKind {
+    AP(u8),
+    True,
+    False
+}
 
 #[derive(Debug)]
 enum LTLFormulaBuilding {
-    AP(u8),
-    Not(Option<Box<LTLFormulaBuilding>>),
-    And(Option<Box<LTLFormulaBuilding>>, Option<Box<LTLFormulaBuilding>>),
-    Next(Option<Box<LTLFormulaBuilding>>),
-    Until(Option<Box<LTLFormulaBuilding>>, Option<Box<LTLFormulaBuilding>>),
-    Identity(Option<Box<LTLFormulaBuilding>>)
+    BinaryInfix(LTLBinaryInfixKind, Option<Box<LTLFormulaBuilding>>, Option<Box<LTLFormulaBuilding>>),
+    UnaryPrefix(LTLUnaryPrefixKind, Option<Box<LTLFormulaBuilding>>),
+    Atomics(LTLAtomicKind)
 }
 
 impl LTLFormulaBuilding {
+
+    fn get_right_child_mut(&mut self) -> Option<&mut LTLFormulaBuilding> {
+        return match self {
+            LTLFormulaBuilding::BinaryInfix(_, _, Some(phi)) |
+            LTLFormulaBuilding::UnaryPrefix(_, Some(phi)) =>  Some(phi),
+            _ => None
+        }
+    }
+
+    fn get_right_child(&self) -> Option<&LTLFormulaBuilding> {
+        return match self {
+            LTLFormulaBuilding::BinaryInfix(_, _, Some(phi)) |
+            LTLFormulaBuilding::UnaryPrefix(_, Some(phi)) =>  Some(phi),
+            _ => None
+        }
+    }
+
+    fn get_rightmost_leaf_mut(&mut self) -> &mut LTLFormulaBuilding {
+        let mut current = self;
+        loop {
+            let next = current.get_right_child();
+
+            if next.is_none() {
+                return current;
+            }
+            current = current.get_right_child_mut().unwrap();
+        }
+    }
+
+    fn get_right_content_mut(&mut self) -> Result<&mut Option<Box<LTLFormulaBuilding>>, ()> {
+        return match self {
+            LTLFormulaBuilding::BinaryInfix(_, _, ref mut phi) |
+            LTLFormulaBuilding::UnaryPrefix(_, ref mut phi) => Ok(phi),
+            LTLFormulaBuilding::Atomics(_) => Err(())
+        }
+    }
+
     fn add(&mut self, other: LTLFormulaBuilding) -> Result<(), ()> {
-        match self {
-            LTLFormulaBuilding::AP(_) => {return Err(())}
-            LTLFormulaBuilding::Not(ref mut phi) |
-            LTLFormulaBuilding::And(_, ref mut phi) |
-            LTLFormulaBuilding::Next(ref mut phi) |
-            LTLFormulaBuilding::Until(_, ref mut phi) |
-            LTLFormulaBuilding::Identity(ref mut phi) => {
+        return match self {
+            LTLFormulaBuilding::BinaryInfix(_, _, ref mut phi) |
+            LTLFormulaBuilding::UnaryPrefix(_, ref mut phi) => {
                 if phi.is_some() {
                     return Err(());
                 }
-                *phi = Some(Box::new(other))
-            }
-        }
-        return Ok(());
-    }
-
-    fn get_rightmost_leaf(&mut self) -> &mut LTLFormulaBuilding {
-        return match self {
-            LTLFormulaBuilding::Not(Some(phi)) => phi.get_rightmost_leaf(),
-            LTLFormulaBuilding::And(_, Some(phi)) => phi.get_rightmost_leaf(),
-            LTLFormulaBuilding::Next(Some(phi)) => phi.get_rightmost_leaf(),
-            LTLFormulaBuilding::Until(_, Some(phi)) => phi.get_rightmost_leaf(),
-            LTLFormulaBuilding::Identity(Some(phi)) => phi.get_rightmost_leaf(),
-            _ => self
-        }
+                *phi = Some(Box::new(other));
+                Ok(())
+            },
+            _ => Err(())
+        };
     }
 
     fn get_highest_node_with_prio_greater_than(&mut self, prio: u32) -> &mut LTLFormulaBuilding {
@@ -57,120 +116,118 @@ impl LTLFormulaBuilding {
                 return current;
             }
             let next_content = next.unwrap();
-            if next_content.operator_prio() >= prio {
+            if next_content.operator_precedence() >= prio {
                 return current;
             }
             current = current.get_right_child_mut().unwrap();
         }
     }
 
-    fn get_right_child_mut(&mut self) -> Option<&mut LTLFormulaBuilding> {
+    fn operator_precedence(&self) -> u32 {
         return match self {
-            LTLFormulaBuilding::Not(Some(phi)) |
-            LTLFormulaBuilding::And(_, Some(phi)) |
-            LTLFormulaBuilding::Next(Some(phi)) |
-            LTLFormulaBuilding::Until(_, Some(phi)) |
-            LTLFormulaBuilding::Identity(Some(phi)) => Some(phi),
-            _ => None
-        }
-    }
-
-    fn get_right_child(&self) -> Option<&LTLFormulaBuilding> {
-        return match self {
-            LTLFormulaBuilding::Not(Some(phi)) |
-            LTLFormulaBuilding::And(_, Some(phi)) |
-            LTLFormulaBuilding::Next(Some(phi)) |
-            LTLFormulaBuilding::Until(_, Some(phi)) |
-            LTLFormulaBuilding::Identity(Some(phi)) => Some(phi),
-            _ => None
-        }
-    }
-
-    fn get_right_content_mut(&mut self) -> Result<&mut Option<Box<LTLFormulaBuilding>>, ()> {
-        return match self {
-            LTLFormulaBuilding::AP(_) => { Err(()) }
-            LTLFormulaBuilding::Not(ref mut phi) |
-            LTLFormulaBuilding::And(_, ref mut phi) |
-            LTLFormulaBuilding::Next(ref mut phi) |
-            LTLFormulaBuilding::Until(_, ref mut phi) |
-            LTLFormulaBuilding::Identity(ref mut phi) => { Ok(phi) }
-        }
-    }
-
-    fn operator_prio(&self) -> u32 {
-        return match self {
-            LTLFormulaBuilding::AP(_) => OPERATOR_PRIO_AP,
-            LTLFormulaBuilding::Not(_) => OPERATOR_PRIO_NOT,
-            LTLFormulaBuilding::And(_, _) => OPERATOR_PRIO_AND,
-            LTLFormulaBuilding::Next(_) => OPERATOR_PRIO_NEXT,
-            LTLFormulaBuilding::Until(_, _) => OPERATOR_PRIO_UNTIL,
-            LTLFormulaBuilding::Identity(_) => 9999
+            LTLFormulaBuilding::BinaryInfix(kind, _, _) => kind.operator_precedence(),
+            LTLFormulaBuilding::UnaryPrefix(kind, _) => kind.operator_precedence(),
+            LTLFormulaBuilding::Atomics(_) => 1200
         };
     }
 
     fn to_formula(&self) -> Result<LTLFormula, ()> {
         return Ok(match self {
-            LTLFormulaBuilding::AP(id) => LTLFormula::AP(*id),
-            LTLFormulaBuilding::Not(Some(phi1)) => LTLFormula::Not(Box::new(phi1.as_ref().to_formula()?)),
-            LTLFormulaBuilding::And(Some(phi1), Some(phi2)) => LTLFormula::And(Box::new(phi1.as_ref().to_formula()?), Box::new(phi2.as_ref().to_formula()?)),
-            LTLFormulaBuilding::Next(Some(phi1)) => LTLFormula::Next(Box::new(phi1.as_ref().to_formula()?)),
-            LTLFormulaBuilding::Until(Some(phi1), Some(phi2)) => LTLFormula::Until(Box::new(phi1.as_ref().to_formula()?), Box::new(phi2.as_ref().to_formula()?)),
-            LTLFormulaBuilding::Identity(Some(phi1)) => phi1.as_ref().to_formula()?,
-            _ => {return Err(());}
+            LTLFormulaBuilding::BinaryInfix(LTLBinaryInfixKind::And, Some(phi1), Some(phi2)) =>
+                LTLFormula::and(phi1.to_formula()?, phi2.to_formula()?),
+            LTLFormulaBuilding::BinaryInfix(LTLBinaryInfixKind::Or, Some(phi1), Some(phi2)) =>
+                LTLFormula::not(LTLFormula::and(
+                    LTLFormula::not(phi1.to_formula()?),
+                    LTLFormula::not(phi2.to_formula()?),
+                )),
+            LTLFormulaBuilding::BinaryInfix(LTLBinaryInfixKind::Implies, Some(phi1), Some(phi2)) =>
+                LTLFormula::not(LTLFormula::and(
+                    phi1.to_formula()?,
+                    LTLFormula::not(phi2.to_formula()?),
+                )),
+            LTLFormulaBuilding::BinaryInfix(LTLBinaryInfixKind::Until, Some(phi1), Some(phi2)) =>
+                LTLFormula::until(phi1.to_formula()?, phi2.to_formula()?, false),
+            LTLFormulaBuilding::BinaryInfix(LTLBinaryInfixKind::WeakUntil, Some(phi1), Some(phi2)) =>
+                LTLFormula::until(phi1.to_formula()?, phi2.to_formula()?, true),
+            LTLFormulaBuilding::BinaryInfix(LTLBinaryInfixKind::Release, Some(phi1), Some(phi2)) =>
+                LTLFormula::not(LTLFormula::until(
+                    LTLFormula::not(phi1.to_formula()?),
+                    LTLFormula::not(phi2.to_formula()?),
+                    false
+                )),
+            LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Not, Some(phi)) =>
+                LTLFormula::not(phi.to_formula()?),
+            LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Next, Some(phi)) =>
+                LTLFormula::next(phi.to_formula()?),
+            LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Future, Some(phi)) =>
+                LTLFormula::until(LTLFormula::not(LTLFormula::and(LTLFormula::ap(0), LTLFormula::not(LTLFormula::ap(0)))), phi.to_formula()?, false),
+            LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Generally, Some(phi)) =>
+                LTLFormula::not(LTLFormula::until(LTLFormula::not(LTLFormula::and(LTLFormula::ap(0), LTLFormula::not(LTLFormula::ap(0)))), LTLFormula::not(phi.to_formula()?), false)),
+            LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Identity, Some(phi)) => phi.to_formula()?,
+            LTLFormulaBuilding::Atomics(LTLAtomicKind::AP(ap)) => LTLFormula::ap(*ap),
+            LTLFormulaBuilding::Atomics(LTLAtomicKind::False) => LTLFormula::and(LTLFormula::ap(0), LTLFormula::not(LTLFormula::ap(0))),
+            LTLFormulaBuilding::Atomics(LTLAtomicKind::True) => LTLFormula::not(LTLFormula::and(LTLFormula::ap(0), LTLFormula::not(LTLFormula::ap(0)))),
+            _ => return Err(())
         });
     }
 }
 
 pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, ParsingError> {
-    let mut current = vec![LTLFormulaBuilding::Identity(None)];
+    let mut current = vec![LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Identity, None)];
 
     for token in &tokens {
         match token {
-            LTLToken::AP(id) => {
-                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::AP(*id)).map_err(|_| {
+            LTLToken::Atomic(atomic) => {
+                let to_insert = match atomic {
+                    LTLTokenAtomic::AP(ap) => LTLAtomicKind::AP(*ap),
+                    LTLTokenAtomic::True => LTLAtomicKind::True,
+                    LTLTokenAtomic::False => LTLAtomicKind::False
+                };
+                current.last_mut().unwrap().get_rightmost_leaf_mut().add(LTLFormulaBuilding::Atomics(to_insert)).map_err(|_| {
                     ParsingError::new(ShittySyntax, "", None)
                 })?;
             }
-            LTLToken::Not => {
-                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::Not(None)).map_err(|_| {
+            LTLToken::UnaryPrefix(unary_prefix) => {
+                let to_insert = match unary_prefix {
+                    LTLTokenUnaryPrefix::Next => LTLUnaryPrefixKind::Next,
+                    LTLTokenUnaryPrefix::Not => LTLUnaryPrefixKind::Not,
+                    LTLTokenUnaryPrefix::Future => LTLUnaryPrefixKind::Future,
+                    LTLTokenUnaryPrefix::Generally => LTLUnaryPrefixKind::Generally,
+                };
+                current.last_mut().unwrap().get_rightmost_leaf_mut().add(LTLFormulaBuilding::UnaryPrefix(to_insert, None)).map_err(|_| {
                     ParsingError::new(ShittySyntax, "", None)
                 })?;
             }
-            LTLToken::Next => {
-                current.last_mut().unwrap().get_rightmost_leaf().add(LTLFormulaBuilding::Next(None)).map_err(|_| {
+            LTLToken::BinaryInfix(binary_infix) => {
+                let to_insert = match binary_infix {
+                    LTLTokenBinaryInfix::And => LTLBinaryInfixKind::And,
+                    LTLTokenBinaryInfix::Or => LTLBinaryInfixKind::Or,
+                    LTLTokenBinaryInfix::Implies => LTLBinaryInfixKind::Implies,
+                    LTLTokenBinaryInfix::Until => LTLBinaryInfixKind::Until,
+                    LTLTokenBinaryInfix::WeakUntil => LTLBinaryInfixKind::WeakUntil,
+                    LTLTokenBinaryInfix::Release => LTLBinaryInfixKind::Release
+                };
+                let parent = current.last_mut().unwrap().get_highest_node_with_prio_greater_than(to_insert.operator_precedence());
+                let right_side = parent.get_right_content_mut().map_err(|_| {
                     ParsingError::new(ShittySyntax, "", None)
                 })?;
-            }
-            LTLToken::And => {
-                let parent_node = current.last_mut().unwrap().get_highest_node_with_prio_greater_than(OPERATOR_PRIO_AND).get_right_content_mut().unwrap();
-                let old = parent_node.replace(Box::new(LTLFormulaBuilding::And(None, None)));
-                if let LTLFormulaBuilding::And(ref mut new, _) = *parent_node.as_mut().unwrap().as_mut() {
-                    *new = old;
-                } else {
-                    panic!("at the disco!");
-                }
-            }
-            LTLToken::Until => {
-                let option = current.last_mut().unwrap().get_right_content_mut().unwrap();
-                let old = option.replace(Box::new(LTLFormulaBuilding::Until(None, None)));
-                if let LTLFormulaBuilding::Until(ref mut new, _) = *option.as_mut().unwrap().as_mut() {
-                    *new = old;
-                } else {
-                    panic!("at the disco!");
-                }
+                let right_side_value = right_side.take();
+                parent.add(LTLFormulaBuilding::BinaryInfix(to_insert, right_side_value, None)).map_err(|_| {
+                    ParsingError::new(ShittySyntax, "", None)
+                })?;
             }
             LTLToken::OpenParenthesis => {
-                current.push(LTLFormulaBuilding::Identity(None));
+                current.push(LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Identity, None));
             }
             LTLToken::CloseParenthesis => {
                 if current.len() <= 1 {
                     return Err(ParsingError::new(ErrorKind::UnmatchedCloseParenthesis, "", None));
                 }
                 let mut last = current.pop().unwrap();
-                if let LTLFormulaBuilding::Identity(None) = last.get_rightmost_leaf() {
+                if let LTLFormulaBuilding::UnaryPrefix(LTLUnaryPrefixKind::Identity, None) = last.get_rightmost_leaf_mut() {
                     return Err(ParsingError::new(ErrorKind::EmptyParenthesis, "", None));
                 }
-                let _ = current.last_mut().unwrap().get_rightmost_leaf().add(last);
+                let _ = current.last_mut().unwrap().get_rightmost_leaf_mut().add(last);
             }
         }
     }
@@ -179,8 +236,8 @@ pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, ParsingError> {
         return Err(ParsingError::new(ErrorKind::UnmatchedOpenParenthesis, "", None));
     }
 
-    return if current.first().is_some() {
-        current.first().unwrap().to_formula().map_err(|_| ParsingError::new(ShittySyntax, "", None))
+    return if let Some(first) = current.first() {
+        first.to_formula().map_err(|_| ParsingError::new(ShittySyntax, "", None))
     } else {
         Err(ParsingError::new(ErrorKind::ShittySyntax, "", None))
     };
@@ -189,35 +246,38 @@ pub fn parser(tokens: Vec<LTLToken>) -> Result<LTLFormula, ParsingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use LTLToken as T;
+    use LTLToken as L;
+    use LTLTokenAtomic as A;
+    use LTLTokenUnaryPrefix as U;
+    use LTLTokenBinaryInfix as B;
     use LTLFormula as F;
 
     #[test]
     fn test_basic_parsing() {
-        assert_eq!(parser(vec![T::Next, T::AP(0), T::And, T::AP(1), T::Until, T::Not, T::AP(0)]),
-                   Ok(F::Until(
-                       Box::new(F::And(
-                           Box::new(F::Next(Box::new(F::AP(0)))),
-                           Box::new(F::AP(1)),
-                       )),
-                       Box::new(F::Not(Box::new(F::AP(0)))),
-                   ))
+        assert_eq!(parser(vec![L::UnaryPrefix(U::Next), L::Atomic(A::AP(0)), L::BinaryInfix(B::And), L::Atomic(A::AP(1)), L::BinaryInfix(B::Until), L::UnaryPrefix(U::Not), L::Atomic(A::AP(0))]),
+                   Ok(F::until(
+                       F::and(
+                           F::next(F::ap(0)),
+                           F::ap(1),
+                       ),
+                       F::not(F::ap(0)),
+                   false))
         );
     }
 
     #[test]
     fn test_proper_errors() {
         assert_eq!(parser(vec![]).unwrap_err().kind(), ShittySyntax);
-        assert_eq!(parser(vec![T::AP(0), T::AP(1)]).unwrap_err().kind(), ShittySyntax);
-        assert_eq!(parser(vec![T::Until, T::AP(0)]).unwrap_err().kind(), ShittySyntax);
-        assert_eq!(parser(vec![T::AP(0), T::Next]).unwrap_err().kind(), ShittySyntax);
-        assert_eq!(parser(vec![T::OpenParenthesis, T::OpenParenthesis, T::AP(0), T::CloseParenthesis])
+        assert_eq!(parser(vec![L::Atomic(A::AP(0)), L::Atomic(A::AP(1))]).unwrap_err().kind(), ShittySyntax);
+        assert_eq!(parser(vec![L::BinaryInfix(B::Until), L::Atomic(A::AP(0))]).unwrap_err().kind(), ShittySyntax);
+        assert_eq!(parser(vec![L::Atomic(A::AP(0)), L::UnaryPrefix(U::Next)]).unwrap_err().kind(), ShittySyntax);
+        assert_eq!(parser(vec![L::OpenParenthesis, L::OpenParenthesis, L::Atomic(A::AP(0)), L::CloseParenthesis])
                        .unwrap_err().kind(), ErrorKind::UnmatchedOpenParenthesis);
-        assert_eq!(parser(vec![T::OpenParenthesis, T::AP(0), T::CloseParenthesis, T::CloseParenthesis])
+        assert_eq!(parser(vec![L::OpenParenthesis, L::Atomic(A::AP(0)), L::CloseParenthesis, L::CloseParenthesis])
                        .unwrap_err().kind(), ErrorKind::UnmatchedCloseParenthesis);
-        assert_eq!(parser(vec![T::CloseParenthesis, T::AP(0), T::OpenParenthesis])
+        assert_eq!(parser(vec![L::CloseParenthesis, L::Atomic(A::AP(0)), L::OpenParenthesis])
                        .unwrap_err().kind(), ErrorKind::UnmatchedCloseParenthesis);
-        assert_eq!(parser(vec![T::AP(0), T::And, T::OpenParenthesis, T::CloseParenthesis]).unwrap_err().kind(),
+        assert_eq!(parser(vec![L::Atomic(A::AP(0)), L::BinaryInfix(B::And), L::OpenParenthesis, L::CloseParenthesis]).unwrap_err().kind(),
                    ErrorKind::EmptyParenthesis)
     }
 

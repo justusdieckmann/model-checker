@@ -2,12 +2,35 @@ use std::collections::HashMap;
 use crate::parsing::parsing_error::{ErrorKind, ParsingError};
 
 #[derive(Debug, PartialEq)]
-pub enum LTLToken {
-    AP(u8),
-    Not,
-    And,
+pub enum LTLTokenUnaryPrefix {
     Next,
+    Not,
+    Future,
+    Generally
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LTLTokenBinaryInfix {
+    And,
+    Or,
+    Implies,
     Until,
+    WeakUntil,
+    Release
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LTLTokenAtomic {
+    AP(u8),
+    True,
+    False
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LTLToken {
+    BinaryInfix(LTLTokenBinaryInfix),
+    UnaryPrefix(LTLTokenUnaryPrefix),
+    Atomic(LTLTokenAtomic),
     OpenParenthesis,
     CloseParenthesis,
 }
@@ -39,7 +62,7 @@ pub fn lexer(text: &str) -> Result<(Vec<LTLToken>, HashMap<String, u8>), Parsing
                     aps.insert(ap_name, val);
                 }
 
-                tokens.push(LTLToken::AP(val));
+                tokens.push(LTLToken::Atomic(LTLTokenAtomic::AP(val)));
                 ap_name = String::new();
                 state = State::None;
             }
@@ -56,10 +79,17 @@ pub fn lexer(text: &str) -> Result<(Vec<LTLToken>, HashMap<String, u8>), Parsing
             let token = match c {
                 '(' => LTLToken::OpenParenthesis,
                 ')' => LTLToken::CloseParenthesis,
-                '!' => LTLToken::Not,
-                '&' => LTLToken::And,
-                'U' => LTLToken::Until,
-                'X' | 'O' => LTLToken::Next,
+                '!' => LTLToken::UnaryPrefix(LTLTokenUnaryPrefix::Not),
+                '&' => LTLToken::BinaryInfix(LTLTokenBinaryInfix::And),
+                '|' => LTLToken::BinaryInfix(LTLTokenBinaryInfix::Or),
+                'U' => LTLToken::BinaryInfix(LTLTokenBinaryInfix::Until),
+                'X' | 'O' => LTLToken::UnaryPrefix(LTLTokenUnaryPrefix::Next),
+                'R' => LTLToken::BinaryInfix(LTLTokenBinaryInfix::Release),
+                'W' => LTLToken::BinaryInfix(LTLTokenBinaryInfix::WeakUntil),
+                'G' => LTLToken::UnaryPrefix(LTLTokenUnaryPrefix::Generally),
+                'F' => LTLToken::UnaryPrefix(LTLTokenUnaryPrefix::Future),
+                '0' => LTLToken::Atomic(LTLTokenAtomic::False),
+                '1' => LTLToken::Atomic(LTLTokenAtomic::True),
                 _ => return Err(ParsingError::new(ErrorKind::UnexpectedToken, text, Some(i)))
             };
 
@@ -76,26 +106,28 @@ pub fn lexer(text: &str) -> Result<(Vec<LTLToken>, HashMap<String, u8>), Parsing
             val = aps.len() as u8;
             aps.insert(ap_name, val);
         }
-        tokens.push(LTLToken::AP(val));
+        tokens.push(LTLToken::Atomic(LTLTokenAtomic::AP(val)));
     }
 
     return Ok((tokens, aps));
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use LTLToken::*;
+    use LTLToken as L;
+    use LTLTokenAtomic as A;
+    use LTLTokenUnaryPrefix as U;
+    use LTLTokenBinaryInfix as B;
 
     #[test]
     fn test_operators() {
-        assert_eq!(lexer("a!Ub&)Xa("), Ok(vec![AP(0), Not, Until, AP(1), And, CloseParenthesis, Next, AP(0), OpenParenthesis]));
+        assert_eq!(lexer("a!Ub&)Xa(").unwrap().0, vec![L::Atomic(A::AP(0)), L::UnaryPrefix(U::Not), L::BinaryInfix(B::Until), L::Atomic(A::AP(1)), L::BinaryInfix(B::And), L::CloseParenthesis, L::UnaryPrefix(U::Next), L::Atomic(A::AP(0)), L::OpenParenthesis]);
     }
 
     #[test]
     fn test_long_variables() {
-        assert_eq!(lexer("aUntilB U a_until_b aUntilB"), Ok(vec![AP(0), Until, AP(1), AP(0)]));
+        assert_eq!(lexer("aUntilB U a_until_b aUntilB").unwrap().0, vec![L::Atomic(A::AP(0)), L::BinaryInfix(B::Until), L::Atomic(A::AP(1)), L::Atomic(A::AP(0))]);
     }
 
     #[test]

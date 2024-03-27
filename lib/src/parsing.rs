@@ -11,11 +11,40 @@ pub enum LTLFormula {
     Not(Box<LTLFormula>),
     And(Box<LTLFormula>, Box<LTLFormula>),
     Next(Box<LTLFormula>),
-    Until(Box<LTLFormula>, Box<LTLFormula>),
+    Until(bool, Box<LTLFormula>, Box<LTLFormula>),
+}
+
+impl LTLFormula {
+
+    pub fn ap(ap: u8) -> Self {
+        return Self::AP(ap)
+    }
+
+    pub fn not(phi: LTLFormula) -> Self {
+        return Self::Not(Box::new(phi))
+    }
+
+    pub fn and(phi1: LTLFormula, phi2: LTLFormula) -> Self {
+        return Self::And(Box::new(phi1), Box::new(phi2))
+    }
+
+    pub fn next(phi: LTLFormula) -> Self {
+        return Self::Next(Box::new(phi))
+    }
+
+    pub fn until(phi1: LTLFormula, phi2: LTLFormula, weak: bool) -> Self {
+        return Self::Until(weak, Box::new(phi1), Box::new(phi2))
+    }
+
 }
 
 pub fn parse(text: &str) -> Result<(LTLFormula, HashMap<String, u8>), ParsingError> {
     let (tokens, ap_map) = lexer::lexer(text)?;
     let ast = parser::parser(tokens)?;
     return Ok((ast, ap_map));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

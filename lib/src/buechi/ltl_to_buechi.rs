@@ -10,7 +10,7 @@ fn get_aps_in_ltl(ltl: &LTLFormula, aps: &mut HashSet<u8>) {
         LTLFormula::Not(phi) => { get_aps_in_ltl(phi, aps); }
         LTLFormula::And(phi1, phi2) => { get_aps_in_ltl(phi1, aps); get_aps_in_ltl(phi2, aps); }
         LTLFormula::Next(phi) => { get_aps_in_ltl(phi, aps); }
-        LTLFormula::Until(phi1, phi2) => { get_aps_in_ltl(phi1, aps); get_aps_in_ltl(phi2, aps); }
+        LTLFormula::Until(_, phi1, phi2) => { get_aps_in_ltl(phi1, aps); get_aps_in_ltl(phi2, aps); }
     }
 }
 
@@ -142,7 +142,7 @@ fn ltl_to_büchi_recursive<'a>(
             constraints.push(CompareTheThing::Next(GetValueForThing::Lookup(id), val));
             GetValueForThing::Lookup(id)
         }
-        LTLFormula::Until(phi1, phi2) => {
+        LTLFormula::Until(weak, phi1, phi2) => {
             let val1 = ltl_to_büchi_recursive(phi1, states, constraints, end_set_functions, bit_usage, bits_used);
             let val2 = ltl_to_büchi_recursive(phi2, states, constraints, end_set_functions, bit_usage, bits_used);
             let id = *bits_used;
@@ -159,12 +159,14 @@ fn ltl_to_büchi_recursive<'a>(
             }
             states.append(&mut tempvec);
             constraints.push(CompareTheThing::Until(val1.clone(), val2.clone(), GetValueForThing::Lookup(id)));
-            end_set_functions.push(GetValueForThing::Not(
-                Box::new(GetValueForThing::And(
-                    Box::new(GetValueForThing::Lookup(id)),
-                    Box::new(GetValueForThing::Not(Box::new(val2)))
-                ))
-            ));
+            if !weak {
+                end_set_functions.push(GetValueForThing::Not(
+                    Box::new(GetValueForThing::And(
+                        Box::new(GetValueForThing::Lookup(id)),
+                        Box::new(GetValueForThing::Not(Box::new(val2)))
+                    ))
+                ));
+            }
             GetValueForThing::Lookup(id)
         }
     }
