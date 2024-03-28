@@ -13,6 +13,7 @@ pub enum LTLTokenUnaryPrefix {
 pub enum LTLTokenBinaryInfix {
     And,
     Or,
+    #[allow(dead_code)]
     Implies,
     Until,
     WeakUntil,

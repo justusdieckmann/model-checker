@@ -10,6 +10,7 @@ use model_checker::{KripkeState, KripkeStructure, ltl_model_check};
 
 type StateId = u64;
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
@@ -25,6 +26,27 @@ fn main() -> Result<(), eframe::Error> {
             Box::<MyApp>::default()
         }),
     )
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    // Redirect `log` message to `console.log` and friends:
+    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+
+    let web_options = eframe::WebOptions::default();
+
+    wasm_bindgen_futures::spawn_local(async {
+        eframe::WebRunner::new()
+            .start(
+                "the_canvas_id", // hardcode it
+                web_options,
+                Box::new(|_cc| {
+                    Box::<MyApp>::default()
+                }),
+            )
+            .await
+            .expect("failed to start eframe");
+    });
 }
 
 const STATE_RADIUS: f32 = 20.0;
@@ -174,7 +196,7 @@ impl MyApp {
                 if let Some(hit_state) = result {
                     if response.drag_started_by(PointerButton::Primary) {
                         self.start_drag = Some(hit_state.id);
-                    } else if response.drag_released_by(PointerButton::Primary) {
+                    } else if response.drag_stopped_by(PointerButton::Primary) {
                         if let Some(start_drag) = self.start_drag {
                             if !self.transitions.contains(&(start_drag, hit_state.id)) {
                                 self.transitions.push((start_drag, hit_state.id));
@@ -204,7 +226,7 @@ impl MyApp {
                     }
                 }
             } else {
-                if response.drag_started_by(PointerButton::Primary) || response.drag_released_by(PointerButton::Primary) {
+                if response.drag_started_by(PointerButton::Primary) || response.drag_stopped_by(PointerButton::Primary) {
                     self.start_drag = None;
                 }
             }
