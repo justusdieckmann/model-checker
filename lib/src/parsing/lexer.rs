@@ -1,12 +1,12 @@
-use std::collections::HashMap;
 use crate::parsing::parsing_error::{ErrorKind, ParsingError};
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
 pub enum LTLTokenUnaryPrefix {
     Next,
     Not,
     Future,
-    Generally
+    Generally,
 }
 
 #[derive(Debug, PartialEq)]
@@ -17,14 +17,14 @@ pub enum LTLTokenBinaryInfix {
     Implies,
     Until,
     WeakUntil,
-    Release
+    Release,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum LTLTokenAtomic {
     AP(u8),
     True,
-    False
+    False,
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,7 +91,7 @@ pub fn lexer(text: &str) -> Result<(Vec<LTLToken>, HashMap<String, u8>), Parsing
                 'F' => LTLToken::UnaryPrefix(LTLTokenUnaryPrefix::Future),
                 '0' => LTLToken::Atomic(LTLTokenAtomic::False),
                 '1' => LTLToken::Atomic(LTLTokenAtomic::True),
-                _ => return Err(ParsingError::new(ErrorKind::UnexpectedToken, text, Some(i)))
+                _ => return Err(ParsingError::new(ErrorKind::UnexpectedToken, text, Some(i))),
             };
 
             tokens.push(token);
@@ -110,7 +110,7 @@ pub fn lexer(text: &str) -> Result<(Vec<LTLToken>, HashMap<String, u8>), Parsing
         tokens.push(LTLToken::Atomic(LTLTokenAtomic::AP(val)));
     }
 
-    return Ok((tokens, aps));
+    Ok((tokens, aps))
 }
 
 #[cfg(test)]
@@ -118,22 +118,49 @@ mod tests {
     use super::*;
     use LTLToken as L;
     use LTLTokenAtomic as A;
-    use LTLTokenUnaryPrefix as U;
     use LTLTokenBinaryInfix as B;
+    use LTLTokenUnaryPrefix as U;
 
     #[test]
     fn test_operators() {
-        assert_eq!(lexer("a!Ub&)Xa(").unwrap().0, vec![L::Atomic(A::AP(0)), L::UnaryPrefix(U::Not), L::BinaryInfix(B::Until), L::Atomic(A::AP(1)), L::BinaryInfix(B::And), L::CloseParenthesis, L::UnaryPrefix(U::Next), L::Atomic(A::AP(0)), L::OpenParenthesis]);
+        assert_eq!(
+            lexer("a!Ub&)Xa(").unwrap().0,
+            vec![
+                L::Atomic(A::AP(0)),
+                L::UnaryPrefix(U::Not),
+                L::BinaryInfix(B::Until),
+                L::Atomic(A::AP(1)),
+                L::BinaryInfix(B::And),
+                L::CloseParenthesis,
+                L::UnaryPrefix(U::Next),
+                L::Atomic(A::AP(0)),
+                L::OpenParenthesis
+            ]
+        );
     }
 
     #[test]
     fn test_long_variables() {
-        assert_eq!(lexer("aUntilB U a_until_b aUntilB").unwrap().0, vec![L::Atomic(A::AP(0)), L::BinaryInfix(B::Until), L::Atomic(A::AP(1)), L::Atomic(A::AP(0))]);
+        assert_eq!(
+            lexer("aUntilB U a_until_b aUntilB").unwrap().0,
+            vec![
+                L::Atomic(A::AP(0)),
+                L::BinaryInfix(B::Until),
+                L::Atomic(A::AP(1)),
+                L::Atomic(A::AP(0))
+            ]
+        );
     }
 
     #[test]
     fn test_invalid_chars() {
-        assert_eq!(lexer("Zahl").unwrap_err().kind(), ErrorKind::UnexpectedToken);
-        assert_eq!(lexer("a ? b").unwrap_err().kind(), ErrorKind::UnexpectedToken);
+        assert_eq!(
+            lexer("Zahl").unwrap_err().kind(),
+            ErrorKind::UnexpectedToken
+        );
+        assert_eq!(
+            lexer("a ? b").unwrap_err().kind(),
+            ErrorKind::UnexpectedToken
+        );
     }
 }

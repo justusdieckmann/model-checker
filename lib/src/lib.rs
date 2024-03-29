@@ -1,33 +1,36 @@
-pub mod parsing;
 pub mod buechi;
+pub mod parsing;
 extern crate bit_vec;
 
-use std::collections::HashMap;
-use bit_vec::BitVec;
-use buechi::Büchi;
-use buechi::ltl_to_buechi::ltl_to_büchi;
-use parsing::LTLFormula;
 use crate::buechi::transitions::Transitions;
+use bit_vec::BitVec;
+use buechi::ltl_to_buechi::ltl_to_büchi;
+use buechi::Büchi;
+use parsing::LTLFormula;
+use std::collections::HashMap;
 
 pub struct KripkeState {
     pub aps: Vec<String>,
     pub id: u64,
-    pub start: bool
+    pub start: bool,
 }
 
 pub struct KripkeStructure {
     pub states: HashMap<u64, KripkeState>,
-    pub transitions: Vec<(u64, u64)>
+    pub transitions: Vec<(u64, u64)>,
 }
 
-fn get_symbol_from_string_aps_with_ap_map(string_aps: &Vec<String>, ap_map: &HashMap<String, u8>) -> u64 {
+fn get_symbol_from_string_aps_with_ap_map(
+    string_aps: &Vec<String>,
+    ap_map: &HashMap<String, u8>,
+) -> u64 {
     let mut symbol = 0;
     for string_ap in string_aps {
         if let Some(ap) = ap_map.get(string_ap) {
             symbol |= 1 << ap;
         }
     }
-    return symbol;
+    symbol
 }
 
 pub fn kripke_to_büchi(ks: &KripkeStructure, ap_map: &HashMap<String, u8>) -> Büchi<u64> {
@@ -43,7 +46,11 @@ pub fn kripke_to_büchi(ks: &KripkeStructure, ap_map: &HashMap<String, u8>) -> B
         state_map.insert(state.id, current_id);
         state_infos.push(state.id);
         if state.start {
-            transitions.add(0, get_symbol_from_string_aps_with_ap_map(&state.aps, ap_map), current_id);
+            transitions.add(
+                0,
+                get_symbol_from_string_aps_with_ap_map(&state.aps, ap_map),
+                current_id,
+            );
         }
     }
 
@@ -55,7 +62,13 @@ pub fn kripke_to_büchi(ks: &KripkeStructure, ap_map: &HashMap<String, u8>) -> B
         );
     }
 
-    return Büchi::new(state_infos, ap_map.len() as u8, 0, transitions, BitVec::from_elem(amount_states, true));
+    Büchi::new(
+        state_infos,
+        ap_map.len() as u8,
+        0,
+        transitions,
+        BitVec::from_elem(amount_states, true),
+    )
 }
 
 pub fn ltl_model_check(ks: &KripkeStructure, formula: &str) -> Option<bool> {
@@ -71,6 +84,5 @@ pub fn ltl_model_check(ks: &KripkeStructure, formula: &str) -> Option<bool> {
     if opt_loop.is_some() {
         dbg!(&opt_loop);
     }
-    return Some(opt_loop.is_none());
+    Some(opt_loop.is_none())
 }
-

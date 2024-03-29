@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use crate::parsing::parsing_error::{ErrorKind, ParsingError};
+use std::collections::HashMap;
 
-mod parser;
 mod lexer;
+mod parser;
 mod parsing_error;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -15,27 +15,26 @@ pub enum LTLFormula {
 }
 
 impl LTLFormula {
-
     pub fn ap(ap: u8) -> Self {
-        return Self::AP(ap)
+        Self::AP(ap)
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn not(phi: LTLFormula) -> Self {
-        return Self::Not(Box::new(phi))
+        Self::Not(Box::new(phi))
     }
 
     pub fn and(phi1: LTLFormula, phi2: LTLFormula) -> Self {
-        return Self::And(Box::new(phi1), Box::new(phi2))
+        Self::And(Box::new(phi1), Box::new(phi2))
     }
 
     pub fn next(phi: LTLFormula) -> Self {
-        return Self::Next(Box::new(phi))
+        Self::Next(Box::new(phi))
     }
 
     pub fn until(phi1: LTLFormula, phi2: LTLFormula, weak: bool) -> Self {
-        return Self::Until(weak, Box::new(phi1), Box::new(phi2))
+        Self::Until(weak, Box::new(phi1), Box::new(phi2))
     }
-
 }
 
 pub fn parse(text: &str) -> Result<(LTLFormula, HashMap<String, u8>), ParsingError> {
@@ -44,10 +43,10 @@ pub fn parse(text: &str) -> Result<(LTLFormula, HashMap<String, u8>), ParsingErr
         return Err(ParsingError::new(ErrorKind::NoAPs, "", None));
     }
     let ast = parser::parser(tokens)?;
-    return Ok((ast, ap_map));
+    Ok((ast, ap_map))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 }

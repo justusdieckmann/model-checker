@@ -7,7 +7,6 @@ use eframe::egui::{Align, Layout, Window};
 use eframe::emath::{vec2, Pos2, Vec2};
 use eframe::epaint::{CubicBezierShape, Stroke};
 use egui::{Align2, Color32, FontId, Frame, Key, PointerButton, Sense, Shape, Ui};
-use egui_extras::{Size, StripBuilder};
 use model_checker::{ltl_model_check, KripkeState, KripkeStructure};
 
 type StateId = u64;
@@ -112,12 +111,7 @@ impl MyApp {
             }
 
             // Should probably happen inside the lib, and more performant.
-            if self
-                .transitions
-                .iter()
-                .find(|(s1, _)| *s1 == state.id)
-                .is_none()
-            {
+            if !self.transitions.iter().any(|(s1, _)| *s1 == state.id) {
                 self.result_text = "⚠ KS ist nicht total".to_owned();
                 return;
             }

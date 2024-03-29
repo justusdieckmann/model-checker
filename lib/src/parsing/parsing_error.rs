@@ -21,7 +21,7 @@ pub struct ParsingError {
 
 impl ParsingError {
     pub fn new(kind: ErrorKind, str: &str, at: Option<usize>) -> ParsingError {
-        return ParsingError {
+        ParsingError {
             kind,
             formula: str.to_string(),
             at: at.unwrap_or(0)
@@ -29,7 +29,7 @@ impl ParsingError {
     }
 
     pub fn kind(&self) -> ErrorKind {
-        return self.kind.clone();
+        self.kind.clone()
     }
 }
 
