@@ -8,10 +8,10 @@ edition = "2021"
 [dependencies]
 model_checker = { path = "lib" }
 
-eframe = { version="0.27", features = [
+eframe = { version="0.27.1", features = [
     "default",
 ] }
-egui_extras = { version="0.27" }
+egui_extras = { version="0.27.1" }
 log = "0.4"
 
 # native:
@@ -32,7 +32,3 @@ opt-level = 2 # fast and small wasm
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
 opt-level = 2
-
-[patch.crates-io]
-eframe = { git = "https://github.com/justusdieckmann/egui", branch = "web-support-zoom-factor" }
-egui = { git = "https://github.com/justusdieckmann/egui", branch = "web-support-zoom-factor" }

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::parsing::parsing_error::ParsingError;
+use crate::parsing::parsing_error::{ErrorKind, ParsingError};
 
 mod parser;
 mod lexer;
@@ -40,6 +40,9 @@ impl LTLFormula {
 
 pub fn parse(text: &str) -> Result<(LTLFormula, HashMap<String, u8>), ParsingError> {
     let (tokens, ap_map) = lexer::lexer(text)?;
+    if ap_map.is_empty() {
+        return Err(ParsingError::new(ErrorKind::NoAPs, "", None));
+    }
     let ast = parser::parser(tokens)?;
     return Ok((ast, ap_map));
 }

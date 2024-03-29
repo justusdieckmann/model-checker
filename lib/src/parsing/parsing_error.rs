@@ -8,7 +8,8 @@ pub enum ErrorKind {
     ShittySyntax,
     UnmatchedOpenParenthesis,
     UnmatchedCloseParenthesis,
-    EmptyParenthesis
+    EmptyParenthesis,
+    NoAPs
 }
 
 #[derive(Debug, PartialEq)]
@@ -38,10 +39,11 @@ impl Display for ParsingError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let error_msg = match self.kind {
             ErrorKind::UnexpectedToken => "Unexpected token",
-            ErrorKind::ShittySyntax => "Empty formula",
+            ErrorKind::ShittySyntax => "Syntax error",
             ErrorKind::UnmatchedOpenParenthesis => "Unmatched open parenthesis",
             ErrorKind::UnmatchedCloseParenthesis => "Unmatched close parenthesis",
-            ErrorKind::EmptyParenthesis => "Empty parenthesis"
+            ErrorKind::EmptyParenthesis => "Empty parenthesis",
+            ErrorKind::NoAPs => "No atomic propositions"
         };
         write!(f, "{} in {}", error_msg, self.formula)
     }
