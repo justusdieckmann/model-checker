@@ -9,14 +9,14 @@ pub enum ErrorKind {
     UnmatchedOpenParenthesis,
     UnmatchedCloseParenthesis,
     EmptyParenthesis,
-    NoAPs
+    NoAPs,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ParsingError {
     kind: ErrorKind,
     formula: String,
-    at: usize
+    at: usize,
 }
 
 impl ParsingError {
@@ -24,12 +24,12 @@ impl ParsingError {
         ParsingError {
             kind,
             formula: str.to_string(),
-            at: at.unwrap_or(0)
+            at: at.unwrap_or(0),
         }
     }
 
-    pub fn kind(&self) -> ErrorKind {
-        self.kind.clone()
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
     }
 }
 
@@ -43,8 +43,8 @@ impl Display for ParsingError {
             ErrorKind::UnmatchedOpenParenthesis => "Unmatched open parenthesis",
             ErrorKind::UnmatchedCloseParenthesis => "Unmatched close parenthesis",
             ErrorKind::EmptyParenthesis => "Empty parenthesis",
-            ErrorKind::NoAPs => "No atomic propositions"
+            ErrorKind::NoAPs => "No atomic propositions",
         };
-        write!(f, "{} in {}", error_msg, self.formula)
+        write!(f, "{}", error_msg)
     }
 }

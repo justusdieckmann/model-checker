@@ -54,15 +54,10 @@ impl Transitions {
             .get(from_state as usize)
             .unwrap()
             .iter()
-            .map(|(a, _)| {
-                *a
-            })
+            .map(|(a, _)| *a)
     }
 
-    pub fn get_from_state(
-        &self,
-        from_state: State,
-    ) -> impl Iterator<Item = (Symbol, State)> + '_ {
+    pub fn get_from_state(&self, from_state: State) -> impl Iterator<Item = (Symbol, State)> + '_ {
         self.transitions
             .get(from_state as usize)
             .unwrap()

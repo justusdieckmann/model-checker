@@ -7,7 +7,7 @@ use eframe::egui::{Align, Layout, Window};
 use eframe::emath::{vec2, Pos2, Vec2};
 use eframe::epaint::{CubicBezierShape, Stroke};
 use egui::{Align2, Color32, FontId, Frame, Key, PointerButton, Sense, Shape, Ui};
-use model_checker::{ltl_model_check, KripkeState, KripkeStructure};
+use model_checker::{ltl_model_check, KripkeBuilder};
 
 type StateId = u64;
 
@@ -93,50 +93,27 @@ impl Default for MyApp {
 
 impl MyApp {
     fn check(&mut self) {
-        let mut map = HashMap::new();
-
-        let mut has_start = false;
+        let mut kripke_builder = KripkeBuilder::new();
 
         for state in self.states.values() {
-            map.insert(
-                state.id,
-                KripkeState {
-                    aps: state.aps.clone(),
-                    id: state.id,
-                    start: state.start,
-                },
-            );
-            if state.start {
-                has_start = true;
-            }
-
-            // Should probably happen inside the lib, and more performant.
-            if !self.transitions.iter().any(|(s1, _)| *s1 == state.id) {
-                self.result_text = "⚠ KS ist nicht total".to_owned();
-                return;
-            }
+            kripke_builder.add_state(state.aps.clone(), state.id, state.start);
+        }
+        for (state1, state2) in &self.transitions {
+            kripke_builder.add_transition(*state1, *state2);
         }
 
-        if !has_start {
-            self.result_text = "⚠ KS hat keinen Start".to_owned();
-            return;
-        }
+        let result = ltl_model_check(kripke_builder, &self.query);
 
-        let ks = KripkeStructure {
-            states: map,
-            transitions: self.transitions.clone(),
-        };
-
-        let result = ltl_model_check(&ks, &self.query);
-
-        if let Some(success) = result {
-            if success {
+        if let Ok(result) = result {
+            if result.is_none() {
                 self.result_text = "✔ Erfüllt".to_owned();
             } else {
                 self.result_text = "❌ Fehler!".to_owned();
             }
         } else {
-            self.result_text = "⚠ Syntaxfehler".to_owned();
+            let mut error = result.unwrap_err().to_string();
+            error.insert_str(0, "⚠ ");
+            self.result_text = error;
         }
     }
 

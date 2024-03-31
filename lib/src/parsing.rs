@@ -1,9 +1,9 @@
-use crate::parsing::parsing_error::{ErrorKind, ParsingError};
+use crate::{ModelCheckingError, ModelCheckingErrorKind};
 use std::collections::HashMap;
 
 mod lexer;
 mod parser;
-mod parsing_error;
+pub mod parsing_error;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum LTLFormula {
@@ -37,16 +37,18 @@ impl LTLFormula {
     }
 }
 
-pub fn parse(text: &str) -> Result<(LTLFormula, HashMap<String, u8>), ParsingError> {
-    let (tokens, ap_map) = lexer::lexer(text)?;
+pub fn parse(text: &str) -> Result<(LTLFormula, HashMap<String, u8>), ModelCheckingError> {
+    let (tokens, ap_map) = lexer::lexer(text)
+        .map_err(|err| ModelCheckingError::new(ModelCheckingErrorKind::FormulaSytaxError(err)))?;
     if ap_map.is_empty() {
-        return Err(ParsingError::new(ErrorKind::NoAPs, "", None));
+        return Err(ModelCheckingError::new(
+            ModelCheckingErrorKind::FormulaNoAPs,
+        ));
     }
-    let ast = parser::parser(tokens)?;
+    let ast = parser::parser(tokens)
+        .map_err(|err| ModelCheckingError::new(ModelCheckingErrorKind::FormulaSytaxError(err)))?;
     Ok((ast, ap_map))
 }
 
 #[cfg(test)]
-mod tests {
-    
-}
+mod tests {}
